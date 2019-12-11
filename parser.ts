@@ -16,14 +16,15 @@ interface IGenericNode {
     nodeType: NodeType.DOMNode;
 }
 
-class DOMNode implements IGenericNode {
+export class DOMNode implements IGenericNode {
     nodeType = NodeType.DOMNode;
     parsingStatus = ParsingStatus.NULL;
     tagName = "";
     children: any[] = [];
+    attributes: { key: string; value?: string | boolean }[] = [];
 }
 
-class Parser {
+export default class Parser {
     stringArr: string[] = [];
     stack: any[] = [];
 
@@ -68,25 +69,28 @@ class Parser {
         ) {
             switch (this.getNextToken()) {
                 case "<":
-                    if (this.getNthToken(1) === "/") {
-                        this.parseCloseTag();
-                    } else {
-                        if (
-                            this.getCurrentObject() &&
-                            this.getCurrentObject<IGenericNode>().nodeType ===
-                                NodeType.DOMNode &&
-                            (this.getCurrentObject<DOMNode>().parsingStatus ===
-                                ParsingStatus.OPEN_TAG_STOP ||
-                                this.getCurrentObject<DOMNode>()
-                                    .parsingStatus ===
-                                    ParsingStatus.NODE_CONTENT_STOP)
-                        ) {
-                            const domNode = this.parseDOMNode();
-                            this.getCurrentObject<DOMNode>().children.push(
-                                domNode
-                            );
+                    {
+                        if (this.getNthToken(1) === "/") {
+                            this.parseCloseTag();
                         } else {
-                            this.parseOpenTag();
+                            if (
+                                this.getCurrentObject() &&
+                                this.getCurrentObject<IGenericNode>()
+                                    .nodeType === NodeType.DOMNode &&
+                                (this.getCurrentObject<DOMNode>()
+                                    .parsingStatus ===
+                                    ParsingStatus.OPEN_TAG_STOP ||
+                                    this.getCurrentObject<DOMNode>()
+                                        .parsingStatus ===
+                                        ParsingStatus.NODE_CONTENT_STOP)
+                            ) {
+                                const domNode = this.parseDOMNode();
+                                this.getCurrentObject<DOMNode>().children.push(
+                                    domNode
+                                );
+                            } else {
+                                this.parseOpenTag();
+                            }
                         }
                     }
                     break;
@@ -107,6 +111,9 @@ class Parser {
                 case "<":
                     this.eat();
                     break;
+                case " ":
+                    this.parseAttributes();
+                    break;
                 default:
                     tagName.push(this.getNextToken());
                     this.eat();
@@ -116,6 +123,64 @@ class Parser {
         this.eat();
         currentObject.tagName = tagName.join("");
         currentObject.parsingStatus = ParsingStatus.OPEN_TAG_STOP;
+    }
+
+    parseAttributes() {
+        const currentObject = this.getCurrentObject<DOMNode>();
+        let attrName: string[] = [];
+        let attributes: { key: string; value?: string | boolean }[] = [];
+        while (this.getNextToken() && this.getNextToken() !== ">") {
+            switch (this.getNextToken()) {
+                case " ":
+                    this.eat();
+                    if (attrName.length !== 0) {
+                        attributes.push({
+                            key: attrName.join(""),
+                            value: true
+                        });
+                        attrName = [];
+                    }
+                    break;
+                case "=":
+                    {
+                        this.eat();
+                        if (attrName.length === 0) {
+                            throw "Attribute value cannot be assigned to empty object";
+                        } else if (
+                            this.getNextToken() !== "'" &&
+                            this.getNextToken() !== '"'
+                        ) {
+                            throw "Attribute value is not valid";
+                        } else {
+                            const value = this.parseAttributesValue();
+                            attributes.push({ key: attrName.join(""), value });
+                            attrName = [];
+                        }
+                    }
+                    break;
+                default: {
+                    attrName.push(this.getNextToken());
+                    this.eat();
+                    break;
+                }
+            }
+        }
+        if (attrName.length !== 0) {
+            attributes.push({ key: attrName.join(""), value: true });
+            attrName = [];
+        }
+        currentObject.attributes = attributes;
+    }
+
+    parseAttributesValue() {
+        const terminator = this.eat()[0];
+        let attrValue: string[] = [];
+        while (this.getNextToken() && this.getNextToken() !== terminator) {
+            attrValue.push(this.getNextToken());
+            this.eat();
+        }
+        this.eat();
+        return attrValue.join("");
     }
 
     parseNodeContent() {
@@ -167,26 +232,3 @@ class Parser {
         currentObject.parsingStatus = ParsingStatus.CLOSE_TAG_STOP;
     }
 }
-
-const htmlStr = `
-    <div>
-        123
-        <span>234</span>
-    </div>
-`;
-
-const parser = new Parser(htmlStr);
-
-const dfs = (root: DOMNode | string) => {
-    if (typeof root !== "string") {
-        console.log(root);
-        console.log("\n");
-        root.children.forEach(c => dfs(c));
-    }
-};
-
-const ast = parser.parseAST();
-
-console.log(JSON.stringify(ast) + "\n");
-
-dfs(ast ?? "");
