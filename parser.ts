@@ -27,6 +27,7 @@ export class DOMNode implements IGenericNode {
 export default class Parser {
     stringArr: string[] = [];
     stack: any[] = [];
+    astRoot: DOMNode | null = null;
 
     constructor(str: string) {
         this.stringArr = str.trim().split("");
@@ -49,12 +50,29 @@ export default class Parser {
         return head;
     }
 
-    parseAST() {
+    public walk(walker: (currentNode: DOMNode | string) => void) {
+        const dfs = (root: DOMNode | string) => {
+            if (typeof root !== "string") {
+                walker(root);
+                root.children.forEach(c => walker(c));
+            } else {
+                walker(root);
+            }
+        };
+        if (this.astRoot) {
+            dfs(this.astRoot);
+        } else {
+            console.log("Current ast is empty");
+        }
+    }
+
+    public parseAST() {
         if (
             this.getNextToken() === "<" &&
-            this.getNthToken(2).match(/[a-zA-Z]/)
+            this.getNthToken(1).match(/[a-zA-Z]/)
         ) {
-            return this.parseDOMNode();
+            this.astRoot = this.parseDOMNode();
+            return this.astRoot;
         }
     }
 
@@ -106,14 +124,29 @@ export default class Parser {
         const currentObject = this.getCurrentObject<DOMNode>();
         currentObject.parsingStatus = ParsingStatus.OPEN_TAG_START;
         let tagName: string[] = [];
+        let isSelfClosingTag = false;
         while (this.getNextToken() && this.getNextToken() !== ">") {
             switch (this.getNextToken()) {
                 case "<":
                     this.eat();
                     break;
                 case " ":
-                    this.parseAttributes();
+                    if (this.getNthToken(1) !== "/") {
+                        this.parseAttributes();
+                    } else {
+                        this.eat();
+                    }
                     break;
+                case "/": {
+                    if (this.getNthToken(1) !== ">") {
+                        throw "Open tag is not valid";
+                    } else {
+                        // self closing xml
+                        this.eat();
+                        isSelfClosingTag = true;
+                    }
+                    break;
+                }
                 default:
                     tagName.push(this.getNextToken());
                     this.eat();
@@ -122,14 +155,22 @@ export default class Parser {
         }
         this.eat();
         currentObject.tagName = tagName.join("");
-        currentObject.parsingStatus = ParsingStatus.OPEN_TAG_STOP;
+        if (!isSelfClosingTag) {
+            currentObject.parsingStatus = ParsingStatus.OPEN_TAG_STOP;
+        } else {
+            currentObject.parsingStatus = ParsingStatus.CLOSE_TAG_STOP;
+        }
     }
 
     parseAttributes() {
         const currentObject = this.getCurrentObject<DOMNode>();
         let attrName: string[] = [];
         let attributes: { key: string; value?: string | boolean }[] = [];
-        while (this.getNextToken() && this.getNextToken() !== ">") {
+        while (
+            this.getNextToken() &&
+            this.getNextToken() !== ">" &&
+            this.getNextToken() !== "/"
+        ) {
             switch (this.getNextToken()) {
                 case " ":
                     this.eat();
