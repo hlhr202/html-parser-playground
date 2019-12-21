@@ -25,29 +25,12 @@ export class DOMNode implements IGenericNode {
 }
 
 export default class Parser {
-    stringArr: string[] = [];
-    stack: any[] = [];
+    private stringArr: string[] = [];
+    private stack: DOMNode[] = [];
     astRoot: DOMNode | null = null;
 
     constructor(str: string) {
         this.stringArr = str.trim().split("");
-    }
-
-    getNextToken() {
-        return this.getNthToken();
-    }
-
-    getNthToken(n = 0) {
-        return this.stringArr[n];
-    }
-
-    getCurrentObject<T>() {
-        return this.stack[this.stack.length - 1] as T;
-    }
-
-    eat(num = 1) {
-        const head = this.stringArr.splice(0, num);
-        return head;
     }
 
     public walk(walker: (currentNode: DOMNode | string) => void) {
@@ -76,13 +59,30 @@ export default class Parser {
         }
     }
 
-    parseDOMNode() {
+    private getNextToken() {
+        return this.getNthToken();
+    }
+
+    private getNthToken(n = 0) {
+        return this.stringArr[n];
+    }
+
+    private getCurrentObject() {
+        return this.stack[this.stack.length - 1];
+    }
+
+    private eat(num = 1) {
+        const head = this.stringArr.splice(0, num);
+        return head;
+    }
+
+    private parseDOMNode() {
         const processingObject = new DOMNode();
         this.stack.push(processingObject);
         while (
             this.getNextToken() &&
             this.getNextToken() !== "" &&
-            this.getCurrentObject<DOMNode>().parsingStatus !==
+            this.getCurrentObject().parsingStatus !==
                 ParsingStatus.CLOSE_TAG_STOP
         ) {
             switch (this.getNextToken()) {
@@ -93,19 +93,15 @@ export default class Parser {
                         } else {
                             if (
                                 this.getCurrentObject() &&
-                                this.getCurrentObject<IGenericNode>()
-                                    .nodeType === NodeType.DOMNode &&
-                                (this.getCurrentObject<DOMNode>()
-                                    .parsingStatus ===
+                                this.getCurrentObject().nodeType ===
+                                    NodeType.DOMNode &&
+                                (this.getCurrentObject().parsingStatus ===
                                     ParsingStatus.OPEN_TAG_STOP ||
-                                    this.getCurrentObject<DOMNode>()
-                                        .parsingStatus ===
+                                    this.getCurrentObject().parsingStatus ===
                                         ParsingStatus.NODE_CONTENT_STOP)
                             ) {
                                 const domNode = this.parseDOMNode();
-                                this.getCurrentObject<DOMNode>().children.push(
-                                    domNode
-                                );
+                                this.getCurrentObject().children.push(domNode);
                             } else {
                                 this.parseOpenTag();
                             }
@@ -120,8 +116,8 @@ export default class Parser {
         return this.stack.pop() as DOMNode;
     }
 
-    parseOpenTag() {
-        const currentObject = this.getCurrentObject<DOMNode>();
+    private parseOpenTag() {
+        const currentObject = this.getCurrentObject();
         currentObject.parsingStatus = ParsingStatus.OPEN_TAG_START;
         let tagName: string[] = [];
         let isSelfClosingTag = false;
@@ -162,8 +158,8 @@ export default class Parser {
         }
     }
 
-    parseAttributes() {
-        const currentObject = this.getCurrentObject<DOMNode>();
+    private parseAttributes() {
+        const currentObject = this.getCurrentObject();
         let attrName: string[] = [];
         let attributes: { key: string; value?: string | boolean }[] = [];
         while (
@@ -213,7 +209,7 @@ export default class Parser {
         currentObject.attributes = attributes;
     }
 
-    parseAttributesValue() {
+    private parseAttributesValue() {
         const terminator = this.eat()[0];
         let attrValue: string[] = [];
         while (this.getNextToken() && this.getNextToken() !== terminator) {
@@ -224,8 +220,8 @@ export default class Parser {
         return attrValue.join("");
     }
 
-    parseNodeContent() {
-        const currentObject = this.getCurrentObject<DOMNode>();
+    private parseNodeContent() {
+        const currentObject = this.getCurrentObject();
         currentObject.parsingStatus = ParsingStatus.NODE_CONTENT_START;
         let nodeContent: string[] = [];
         while (
@@ -246,8 +242,8 @@ export default class Parser {
         currentObject.parsingStatus = ParsingStatus.NODE_CONTENT_STOP;
     }
 
-    parseCloseTag() {
-        const currentObject = this.getCurrentObject<DOMNode>();
+    private parseCloseTag() {
+        const currentObject = this.getCurrentObject();
         currentObject.parsingStatus = ParsingStatus.CLOSE_TAG_START;
         let tagName: string[] = [];
         while (this.getNextToken() && this.getNextToken() !== ">") {
