@@ -37,7 +37,7 @@ export default class Parser {
         const dfs = (root: DOMNode | string) => {
             if (typeof root !== "string") {
                 walker(root);
-                root.children.forEach(c => walker(c));
+                root.children.forEach(c => dfs(c));
             } else {
                 walker(root);
             }
